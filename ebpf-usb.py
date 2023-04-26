@@ -9,8 +9,9 @@ import atexit
 import argparse
 
 parser = argparse.ArgumentParser(description='Monitor USB traffic using eBPF')
-parser.add_argument('--vendor-id', '-v', type=lambda x: int(x, 16), help='The vendor id, expressed in hex')
+parser.add_argument('--vendor-id', '-e', type=lambda x: int(x, 16), help='The vendor id, expressed in hex')
 parser.add_argument('--product-id', '-p', type=lambda x: int(x, 16), help='The product id, expressed in hex')
+parser.add_argument('--device', '-d', type=str, help='Enter the VID:PID in hexadecimal (shortform entry mode)')
 parser.add_argument('--out-only', '-o', action='store_true', help='Filter out all incoming messages')
 parser.add_argument('--in-only', '-i', action='store_true', help='Filter out all outgoing messages')
 parser.add_argument('--truncate', '-t', action='store_true', help='Truncate hexdump buffer outputs to their actual length')
@@ -18,12 +19,22 @@ parser.add_argument('--truncate', '-t', action='store_true', help='Truncate hexd
 args = parser.parse_args()
 
 vid_pid_check = ""
+if args.device is not None:
+	dlist = args.device.split(':')
+	#print("Dev list :: %s" % dlist)
+	args.vendor_id = int(dlist[0],16)
+	args.product_id = int(dlist[1],16)
+	#vid_pid_check = "if (urb->dev->descriptor.idVendor != %d || urb->dev->descriptor.idProduct != %d) { return 0; }" % (args.vendor_id, args.product_id)
+	#print(vid_pid_check)
+	#exit(0)
 if args.vendor_id is not None and args.product_id is not None:
 	vid_pid_check = "if (urb->dev->descriptor.idVendor != %d || urb->dev->descriptor.idProduct != %d) { return 0; }" % (args.vendor_id, args.product_id)
 elif args.vendor_id is not None:
 	vid_pid_check = "if (urb->dev->descriptor.idVendor != %d) {{ return 0; }}" % (args.vendor_id)
 elif args.product_id is not None:
 	vid_pid_check = "if (urb->dev->descriptor.idProduct != %d) {{ return 0; }}" % (args.product_id)
+
+print("DEBUG :: %s" % vid_pid_check)
 
 endpoint_dir_check = ""
 if args.out_only and args.in_only:
@@ -108,7 +119,7 @@ def print_event(cpu, data, size):
 	transfer_type = get_transfer_type(event.bmAttributes)
 	endpoint_type = get_endpoint_type(event.transfer_flags)
 
-	print("%d: %04x:%04x [0x%02x %s] (%s) actual length = %d, buffer length = %d"
+	print("%d: %04x:%04x [0x%02x %s] (%s) actual length = %d(%04x), buffer length = %d(%04x)"
 		% (
 			event_number,
 			event.vendor,
@@ -117,6 +128,8 @@ def print_event(cpu, data, size):
 			endpoint_type,
 			transfer_type,
 			event.alen,
+			event.alen,
+			event.buflen,
 			event.buflen
 		))
 
